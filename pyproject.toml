@@ -1,0 +1,16 @@
+[project]
+name = "projet-7"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "faiss-cpu>=1.13.2",
+    "ipykernel>=7.2.0",
+    "langchain>=1.2.17",
+    "langchain-community>=0.4.1",
+    "langchain-text-splitters>=1.1.2",
+    "mistralai>=2.4.4",
+    "pandas>=3.0.2",
+    "tiktoken>=0.12.0",
+]
