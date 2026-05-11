@@ -9,7 +9,9 @@ wheels/
 # Virtual environments
 .venv
 
-# folder data
+# data
 data/
+src/*.json
+src/*.idx
 
 .env
