@@ -15,3 +15,6 @@ src/*.json
 src/*.idx
 
 .env
+
+src/chunks_with_embeddings.json
+src/faiss_index.idx
