@@ -1,4 +1,4 @@
-from mistralai.client import Mistral
+from mistralai import Mistral
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import HumanMessage, SystemMessage
 import os
@@ -49,8 +49,37 @@ class EventChatbot:
         # Charger l'index FAISS
         self.index = faiss.read_index(str(index_path))
         
-        # Charger les métadonnées des chunks
+        # ✅ CORRECTION : Charger avec conversion automatique des dates
         self.chunks_df = pd.read_json(chunks_path)
+        
+        # ✅ FORCER la conversion des colonnes de dates (timestamps en millisecondes)
+        date_columns = ['firstdate_begin', 'firstdate_end', 'lastdate_begin', 'lastdate_end']
+        for col in date_columns:
+            if col in self.chunks_df.columns:
+                # Convertir les timestamps (millisecondes) en datetime UTC
+                self.chunks_df[col] = pd.to_datetime(
+                    self.chunks_df[col], 
+                    unit='ms',  # ✅ Timestamps en millisecondes
+                    utc=True, 
+                    errors='coerce'
+                )
+        
+        # ✅ VÉRIFICATION : Afficher les statistiques de dates
+        current_date = pd.Timestamp.now(tz='UTC')
+        future_events = self.chunks_df[self.chunks_df['lastdate_end'] >= current_date]
+        
+        print(f"\n📊 Statistiques des données :")
+        print(f"  - Total chunks : {len(self.chunks_df)}")
+        print(f"  - Événements futurs : {len(future_events['uid'].unique())} événements uniques")
+        print(f"  - Date la plus proche : {self.chunks_df['firstdate_begin'].min()}")
+        print(f"  - Date la plus lointaine : {self.chunks_df['lastdate_end'].max()}")
+
+        # Extraire dynamiquement toutes les villes disponibles
+        self.available_cities = self._extract_available_cities()
+        self.available_postal_codes = self._extract_available_postal_codes()
+        
+        print(f"📍 {len(self.available_cities)} villes détectées dans les données")
+        print(f"📮 {len(self.available_postal_codes)} codes postaux détectés")
         
         # Initialiser le client Mistral
         self.mistral = Mistral(api_key=api_key)
@@ -122,25 +151,80 @@ class EventChatbot:
                 }
         
         return None
+    
+    def _extract_available_cities(self):
+        """Extrait toutes les villes uniques présentes dans les données"""
+        if 'location_city' not in self.chunks_df.columns:
+            return {}  # Retourner un dictionnaire vide, pas un set
+        
+        cities = self.chunks_df['location_city'].dropna().unique()
+        
+        # Normaliser les noms (minuscules, sans accents pour la recherche)
+        import unicodedata
+        normalized_cities = {}
+        
+        for city in cities:
+            # Normaliser pour la recherche
+            normalized = unicodedata.normalize('NFD', city.lower())
+            normalized = ''.join(c for c in normalized if unicodedata.category(c) != 'Mn')
+            normalized_cities[normalized] = city  # Garder l'original
+        
+        return normalized_cities  # ✅ Retourne un dictionnaire
+    
+    def _extract_available_postal_codes(self):
+        """Extrait tous les codes postaux uniques présents dans les données"""
+        if 'location_postalcode' not in self.chunks_df.columns:
+            return set()
+        
+        postal_codes = self.chunks_df['location_postalcode'].dropna().unique()
+        
+        # Convertir en set pour recherche rapide
+        return set(str(code) for code in postal_codes)
 
-    def search_relevant_events(self, query, k=5):
+    def extract_location_filter(self, query):
+        """Extrait les contraintes géographiques de la requête"""
+        import unicodedata
+        
+        # Normaliser la requête
+        query_normalized = unicodedata.normalize('NFD', query.lower())
+        query_normalized = ''.join(c for c in query_normalized if unicodedata.category(c) != 'Mn')
+        
+        # 1. Chercher une ville dans la requête
+        # self.available_cities est un DICTIONNAIRE {normalized: original}
+        for normalized_city, original_city in self.available_cities.items():
+            if normalized_city in query_normalized:
+                print(f"🏙️  Ville détectée : {original_city}")
+                return {'type': 'city', 'value': original_city}
+        
+        # 2. Chercher un code postal (tous les codes postaux français : 5 chiffres)
+        import re
+        postal_match = re.search(r'\b(\d{5})\b', query)
+        if postal_match:
+            postal_code = postal_match.group(1)
+            # Vérifier que ce code postal existe dans nos données
+            if postal_code in self.available_postal_codes:
+                print(f"📮 Code postal détecté : {postal_code}")
+                return {'type': 'postal', 'value': postal_code}
+            else:
+                print(f"⚠️  Code postal {postal_code} non trouvé dans les données")
+        
+        return None
+
+    def search_relevant_events(self, query, k=10):
         """Recherche les événements les plus pertinents"""
         
-        # 1. Extraire les filtres temporels
+        # Extraire les filtres temporels et géographiques
         temporal_filter = self.extract_temporal_filter(query)
+        location_filter = self.extract_location_filter(query)
         
-        # 2. Filtrer d'abord par date si nécessaire
+        # Partir du DataFrame complet
+        filtered_df = self.chunks_df.copy()
+        
+        # Filtrer d'abord par date si nécessaire
         if temporal_filter and temporal_filter['type'] == 'month':
             print(f"🗓️  Filtre temporel détecté : {temporal_filter['month']}/{temporal_filter['year']}")
             
-            # Filtrer les chunks par mois
-            filtered_df = self.chunks_df.copy()
-            
-            # Convertir les dates
-            filtered_df['firstdate_begin_dt'] = pd.to_datetime(filtered_df['firstdate_begin'], utc=True)
-            filtered_df['lastdate_end_dt'] = pd.to_datetime(filtered_df['lastdate_end'], utc=True)
-            
-            # Créer les bornes du mois demandé
+            # ✅ Les dates sont déjà en datetime, pas besoin de conversion
             start_of_month = pd.Timestamp(
                 year=temporal_filter['year'], 
                 month=temporal_filter['month'], 
@@ -165,14 +249,13 @@ class EventChatbot:
             
             # Filtrer : événements qui se déroulent au moins partiellement dans le mois
             mask = (
-                (filtered_df['firstdate_begin_dt'] < end_of_month) & 
-                (filtered_df['lastdate_end_dt'] >= start_of_month)
+                (filtered_df['firstdate_begin'] < end_of_month) & 
+                (filtered_df['lastdate_end'] >= start_of_month)
             )
             
             filtered_df = filtered_df[mask]
             
             # DÉDUPLICATION PAR UID
-            # Grouper par UID et garder tous les chunks de chaque événement unique
             unique_uids = filtered_df['uid'].unique()
             print(f"✓ {len(unique_uids)} événements uniques trouvés en {temporal_filter['month']}/{temporal_filter['year']}")
             
@@ -180,31 +263,62 @@ class EventChatbot:
             selected_uids = unique_uids[:k]
             result_df = filtered_df[filtered_df['uid'].isin(selected_uids)]
             
-            # Nettoyer les colonnes temporaires
-            result_df = result_df.drop(['firstdate_begin_dt', 'lastdate_end_dt'], axis=1)
-            
             # Distances fictives (tous également pertinents)
             distances = np.zeros(len(result_df))
             
             return result_df, distances
         
-        # 3. Sinon, recherche sémantique classique
+        # Filtrer par localisation si nécessaire
+        if location_filter:
+            print(f"📍 Filtre géographique détecté : {location_filter['value']}")
+            
+            if location_filter['type'] == 'city':
+                filtered_df = filtered_df[
+                    filtered_df['location_city'].str.contains(
+                        location_filter['value'], 
+                        case=False, 
+                        na=False
+                    )
+                ]
+            elif location_filter['type'] == 'postal':
+                filtered_df = filtered_df[
+                    filtered_df['location_postalcode'] == location_filter['value']
+                ]
+            
+            # DÉDUPLICATION PAR UID après filtrage géographique
+            unique_uids = filtered_df['uid'].unique()
+            print(f"✓ {len(unique_uids)} événements uniques trouvés pour {location_filter['value']}")
+            
+            # Limiter au nombre d'événements demandés
+            selected_uids = unique_uids[:k]
+            result_df = filtered_df[filtered_df['uid'].isin(selected_uids)]
+            
+            # Distances fictives
+            distances = np.zeros(len(result_df))
+            
+            return result_df, distances
+        
+        # Recherche sémantique classique
         query_embedding = self.vectorize_query(query)
         
-        # AUGMENTER k pour avoir plus de candidats
-        search_k = min(k * 20, len(self.chunks_df))  # 20x plus de chunks
+        # Rechercher dans FAISS
+        search_k = min(k * 20, len(self.chunks_df))
         distances, indices = self.index.search(query_embedding, search_k)
         
+        # Récupérer les chunks candidats
         relevant_chunks = self.chunks_df.iloc[indices[0]].copy()
         relevant_chunks['distance'] = distances[0]
         
-        # Filtrer les événements futurs
-        current_date = pd.Timestamp.now(tz='UTC')
-        relevant_chunks = relevant_chunks[
-            pd.to_datetime(relevant_chunks["lastdate_end"], utc=True) >= current_date
-        ]
+        print(f"📊 Chunks candidats avant filtrage : {len(relevant_chunks)}")
         
-        # DÉDUPLICATION : Garder k événements uniques
+        # ✅ Filtrer les événements futurs (dates déjà converties)
+        current_date = pd.Timestamp.now(tz='UTC')
+        future_mask = relevant_chunks['lastdate_end'] >= current_date
+        relevant_chunks = relevant_chunks[future_mask]
+        
+        print(f"📊 Chunks après filtrage temporel : {len(relevant_chunks)}")
+        
+        # Déduplication par UID
         unique_events = []
         seen_uids = set()
         
@@ -237,6 +351,14 @@ class EventChatbot:
         context_parts = []
         current_date = pd.Timestamp.now(tz='UTC')
         
+        # Vérifier que le DataFrame n'est pas vide et contient la colonne 'uid'
+        if chunks_df.empty:
+            return "Aucun événement trouvé."
+        
+        if 'uid' not in chunks_df.columns:
+            print(f"⚠️ Colonnes disponibles : {chunks_df.columns.tolist()}")
+            return "Erreur : colonne 'uid' manquante dans les données."
+        
         # Grouper par UID pour éviter les doublons
         grouped = chunks_df.groupby('uid')
         
@@ -261,23 +383,37 @@ class EventChatbot:
             if 'lastdate_end' in first_row and pd.notna(first_row['lastdate_end']):
                 lastdate_end = pd.to_datetime(first_row['lastdate_end'], utc=True)
                 date_info.append(f"Dernière date fin: {lastdate_end.strftime('%d/%m/%Y %H:%M')}")
-                
-                # Vérification de validité temporelle
-                if lastdate_end < current_date:
-                    date_info.append("⚠️ ÉVÉNEMENT PASSÉ - NE PAS RECOMMANDER")
+
+            location_info = []
+            if 'location_name' in first_row and pd.notna(first_row['location_name']):
+                location_info.append(f"Lieu: {first_row['location_name']}")
+            if 'location_city' in first_row and pd.notna(first_row['location_city']):
+                location_info.append(f"Ville: {first_row['location_city']}")
+            if 'location_postalcode' in first_row and pd.notna(first_row['location_postalcode']):
+                location_info.append(f"Code postal: {first_row['location_postalcode']}")
+            if 'location_phone' in first_row and pd.notna(first_row['location_phone']):
+                location_info.append(f"Téléphone: {first_row['location_phone']}")
+            if 'location_website' in first_row and pd.notna(first_row['location_website']):
+                location_info.append(f"Site web: {first_row['location_website']}")
             
             # Reconstruire la description complète à partir de tous les chunks
-            full_description = " ".join(group.sort_values('chunk_id')['text'].tolist())
+            if 'chunk_id' in group.columns:
+                full_description = " ".join(group.sort_values('chunk_id')['text'].tolist())
+            else:
+                full_description = " ".join(group['text'].tolist())
             
             # Construire le contexte
             context_block = [event_info]
             if date_info:
                 context_block.append("DATES: " + " | ".join(date_info))
+            if location_info:
+                context_block.append("LOCALISATION: " + " | ".join(location_info))
             context_block.append(f"DESCRIPTION:\n{full_description}")
             
             context_parts.append("\n".join(context_block))
         
         return "\n\n" + "="*80 + "\n\n".join(context_parts)
+
         
     def generate_response(self, query, context):
         """Génère une réponse augmentée avec Mistral"""
@@ -395,19 +531,19 @@ if __name__ == "__main__":
     chatbot = EventChatbot()
     
     # Exemples de requêtes
-    # test_queries = [
-    #     "Je cherche un concert de musique classique ce week-end",
-    #     "Quels événements pour enfants sont disponibles le mois prochain ?",
-    #     "Je veux découvrir des expositions d'art contemporain",
-    #     "Recommande-moi des activités en plein air"
-    # ]
+    test_queries = [
+        "Quels événements de musique classique sont disponibles en juillet 2026 ?",
+        "Je cherche des activités pour enfants le premier week-end de juin",
+        "Je veux découvrir des expositions d'art contemporain",
+        "Recommande-moi des activités en plein air"
+    ]
     
-    # print("\n TEST DES REQUÊTES")
-    # print("="*80)
+    print("\n TEST DES REQUÊTES")
+    print("="*80)
     
-    # for query in test_queries:
-    #     chatbot.chat(query, k=3, show_sources=False)
-    #     print("\n" + "="*80 + "\n")
+    for query in test_queries:
+        chatbot.chat(query, k=5, show_sources=False)
+        print("\n" + "="*80 + "\n")
     
     # Lancer le mode interactif
-    chatbot.interactive_mode()
+    # chatbot.interactive_mode()
