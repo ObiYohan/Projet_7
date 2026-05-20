@@ -1,0 +1,18 @@
+[
+  {
+    "query": "Quels concerts sont disponibles en juillet 2026 ?",
+    "ground_truth": "En juillet 2026, vous trouverez plusieurs concerts de musique."
+  },
+  {
+    "query": "Je cherche des activités pour enfants en juin",
+    "ground_truth": "Voici les activités adaptées aux enfants disponibles pour le mois de juin."
+  },
+  {
+    "query": "Je veux découvrir des expositions d'art contemporain",
+    "ground_truth": "Plusieurs galeries présentent 4 expositions d'art contemporain avec des œuvres de jeunes artistes émergents."
+  },
+  {
+    "query": "Recommande-moi des activités en plein air dans le Vaucluse",
+    "ground_truth": "4 événements gratuits sont proposés : concerts en plein air, visites guidées, projections de films et conférences."
+  }
+]
