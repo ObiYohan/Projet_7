@@ -526,24 +526,24 @@ class EventChatbot:
 
 
 # Exemple d'utilisation
-if __name__ == "__main__":
+# if __name__ == "__main__":
     # Initialiser le chatbot
-    chatbot = EventChatbot()
+    # chatbot = EventChatbot()
     
-    # Exemples de requêtes
-    test_queries = [
-        "Quels événements de musique classique sont disponibles en juillet 2026 ?",
-        "Je cherche des activités pour enfants le premier week-end de juin",
-        "Je veux découvrir des expositions d'art contemporain",
-        "Recommande-moi des activités en plein air"
-    ]
+    # # Exemples de requêtes
+    # test_queries = [
+    #     "Quels concerts sont disponibles en juillet 2026 ?",
+    #     "Je cherche des activités pour enfants le premier week-end de juin",
+    #     "Je veux découvrir des expositions d'art contemporain",
+    #     "Recommande-moi des activités en plein air dans le Vaucluse"
+    # ]
     
-    print("\n TEST DES REQUÊTES")
-    print("="*80)
+    # print("\n TEST DES REQUÊTES")
+    # print("="*80)
     
-    for query in test_queries:
-        chatbot.chat(query, k=5, show_sources=False)
-        print("\n" + "="*80 + "\n")
+    # for query in test_queries:
+    #     chatbot.chat(query, k=5, show_sources=False)
+    #     print("\n" + "="*80 + "\n")
     
     # Lancer le mode interactif
     # chatbot.interactive_mode()
