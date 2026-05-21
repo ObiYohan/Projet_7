@@ -305,9 +305,6 @@ class EventChatbot:
         """
         Recherche les événements les plus pertinents.
         
-        FIX #1 : Les filtres temporel et géographique sont désormais cumulables.
-        FIX #2 : Après filtrage, on classe toujours par pertinence sémantique
-                 au lieu de prendre les k premiers arbitrairement.
         """
         temporal_filter = self.extract_temporal_filter(query)
         location_filter = self.extract_location_filter(query)
