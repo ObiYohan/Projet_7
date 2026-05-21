@@ -22,4 +22,6 @@ dependencies = [
     "langchain-huggingface>=1.2.2",
     "sentence-transformers>=5.5.0",
     "deepeval>=4.0.2",
+    "pytest>=9.0.3",
+    "pytest-cov>=7.1.0",
 ]

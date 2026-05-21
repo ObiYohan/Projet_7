@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, BackgroundTasks, Security, Header
+from fastapi import Depends, FastAPI, HTTPException, BackgroundTasks, Security, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, Field
@@ -6,6 +6,9 @@ from typing import Optional, List
 from contextlib import asynccontextmanager
 import sys
 import os
+import subprocess
+import faiss
+from requests import request
 
 # Add parent directory to path to import chatbot
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -15,7 +18,7 @@ from src.chatbot import EventChatbot
 chatbot_instance = None
 
 # Security: API Key for sensitive endpoints
-API_KEY = os.getenv("API_KEY", "your-secret-api-key-change-me")
+API_KEY = os.getenv("API_KEY", "your-super-secret-key-change-me-in-production")
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 async def verify_api_key(api_key: str = Security(api_key_header)):
@@ -163,52 +166,60 @@ async def ask(request: QueryRequest):
         )
 
 # Rebuild vector database
-@app.post("/rebuild", response_model=RebuildResponse, tags=["Admin"], dependencies=[Security(verify_api_key)])
-async def rebuild_vector_database():
+@app.post("/rebuild", response_model=RebuildResponse, tags=["System"])
+async def rebuild_index(api_key: str = Depends(verify_api_key)):
     """
-    PROTECTED ENDPOINT - Requires API Key
+    Rebuild the FAISS index with new data (requires API key)
     
-    Reconstruit complètement la base vectorielle à partir des données sources.
-    
-    **Authentification requise**: Header `X-API-Key`
-    
-    **Utilisation**:
-    ```bash
-    curl -X POST http://localhost:8000/rebuild \
-         -H "X-API-Key: your-secret-api-key"
-    ```
+    **Important**: Place your new data file at `data/new-data.json` before calling this endpoint.
     """
     global chatbot_instance
     
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    new_data_file = os.path.join(base_dir, "data", "new-data.json")
+    
+    # Check if new data file exists
+    if not os.path.exists(new_data_file):
+        raise HTTPException(
+            status_code=400,
+            detail=f"New data file not found at: {new_data_file}. Please upload your data file first."
+        )
+    
     try:
-        print("Starting vector database rebuild...")
+        # Étape 1: Exécuter le script de chargement des nouvelles données
+        print("📥 Chargement des nouvelles données...")
+        result = subprocess.run(
+            [sys.executable, "src/load_new_data.py"],
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        )
+        print(result.stdout)
         
-        # Rebuild chatbot (this will reload data and recreate FAISS index)
-        new_chatbot = EventChatbot()
-        
-        # Get statistics before replacing
-        total_events = len(new_chatbot.chunks_df["uid"].unique())
-        total_chunks = len(new_chatbot.chunks_df)
-        index_size = new_chatbot.index.ntotal
-        
-        # Replace old instance
-        chatbot_instance = new_chatbot
-        
-        print(f"Rebuild completed: {total_events} events, {total_chunks} chunks, {index_size} vectors")
+        # Étape 2: Réinitialiser le chatbot avec les nouvelles données
+        print("🔄 Réinitialisation du chatbot...")
+        chatbot_instance = EventChatbot()
         
         return RebuildResponse(
             status="success",
-            message="Vector database rebuilt successfully",
-            index_size=index_size,
-            total_events=total_events,
-            total_chunks=total_chunks
+            message="Index rebuilt successfully",
+            index_size=chatbot_instance.index.ntotal,
+            total_events=len(chatbot_instance.chunks_df["uid"].unique()),
+            total_chunks=len(chatbot_instance.chunks_df)
         )
         
-    except Exception as e:
-        print(f"Rebuild failed: {e}")
+    except subprocess.CalledProcessError as e:
+        print(f"❌ Erreur lors du chargement des données: {e.stderr}")
         raise HTTPException(
-            status_code=500,
-            detail=f"Error rebuilding vector database: {str(e)}"
+            status_code=500, 
+            detail=f"Failed to load new data: {e.stderr}"
+        )
+    except Exception as e:
+        print(f"❌ Erreur lors de la reconstruction: {str(e)}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Failed to rebuild index: {str(e)}"
         )
     
 # Get chatbot statistics
@@ -233,6 +244,26 @@ async def get_stats():
             status_code=500,
             detail=f"Error getting stats: {str(e)}"
         )
+
+@app.get("/status")
+async def get_status():
+    """Get current index status"""
+    if chatbot_instance is None:
+        return {
+            "index_loaded": False,
+            "total_chunks": 0,
+            "index_size": 0,
+            "data_file_exists": os.path.exists("../data/chunks_with_embeddings.json"),
+            "index_file_exists": os.path.exists("../data/faiss_index.idx")
+        }
+    
+    return {
+        "index_loaded": True,
+        "total_chunks": len(chatbot_instance.chunks_df),
+        "index_size": chatbot_instance.index.ntotal,
+        "data_file_exists": os.path.exists("../data/chunks_with_embeddings.json"),
+        "index_file_exists": os.path.exists("../data/faiss_index.idx")
+    }
 
 # Root endpoint
 @app.get("/", tags=["System"])
