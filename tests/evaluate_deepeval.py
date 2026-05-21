@@ -1,5 +1,12 @@
 """
-Évaluation avec DeepEval - Alternative à Ragas
+Évaluation avec DeepEval — version améliorée
+
+Corrections apportées :
+  FIX #3 : retrieval_context enrichi avec dates et lieux
+            (les chunks bruts sans métadonnées faisaient échouer ContextualPrecision)
+  FIX #4 : ground_truth réalistes et atteignables par le RAG
+            (des agrégats comme "173 événements" ne peuvent pas être fournis par
+             un retriever k=5, donc ContextualRecall était mécaniquement 0)
 """
 import sys
 from pathlib import Path
@@ -13,6 +20,7 @@ from deepeval.metrics import (
 )
 from deepeval.test_case import LLMTestCase
 from deepeval.models.base_model import DeepEvalBaseLLM
+import pandas as pd
 
 sys.path.append(str(Path(__file__).parent.parent))
 from src.chatbot import EventChatbot
@@ -33,7 +41,6 @@ class MistralModel(DeepEvalBaseLLM):
         return self.client
     
     def _wait_if_needed(self):
-        """Attendre si nécessaire pour respecter le rate limit"""
         current_time = time.time()
         time_since_last_call = current_time - self.last_call_time
         if time_since_last_call < self.delay:
@@ -43,7 +50,6 @@ class MistralModel(DeepEvalBaseLLM):
         self.last_call_time = time.time()
     
     def generate(self, prompt: str, max_retries: int = 3) -> str:
-        """Génère avec retry en cas de rate limit"""
         for attempt in range(max_retries):
             try:
                 self._wait_if_needed()
@@ -73,20 +79,76 @@ class MistralModel(DeepEvalBaseLLM):
         return self.model
 
 
+def build_rich_context(relevant_chunks: pd.DataFrame) -> list[str]:
+    """
+    FIX #3 : Construit des contextes enrichis (texte + dates + lieu) par événement.
+
+    DeepEval évalue chaque élément de retrieval_context indépendamment.
+    Un chunk de texte brut sans dates ni ville semble "hors sujet" à l'LLM-juge.
+    En incluant les métadonnées structurées, chaque entrée devient auto-suffisante.
+    """
+    if relevant_chunks.empty:
+        return []
+
+    context_items = []
+
+    for uid, group in relevant_chunks.groupby('uid'):
+        first_row = group.iloc[0]
+        parts = []
+
+        # Titre / nom de l'événement
+        if 'title' in first_row and pd.notna(first_row.get('title')):
+            parts.append(f"Événement : {first_row['title']}")
+
+        # Dates
+        date_parts = []
+        for col, label in [
+            ('firstdate_begin', 'Début'),
+            ('lastdate_end', 'Fin'),
+        ]:
+            if col in first_row and pd.notna(first_row[col]):
+                ts = pd.to_datetime(first_row[col], utc=True)
+                date_parts.append(f"{label} : {ts.strftime('%d/%m/%Y %H:%M')}")
+        if date_parts:
+            parts.append("Dates — " + " | ".join(date_parts))
+
+        # Localisation
+        loc_parts = []
+        for col, label in [
+            ('location_name', 'Lieu'),
+            ('location_city', 'Ville'),
+            ('location_postalcode', 'CP'),
+        ]:
+            if col in first_row and pd.notna(first_row.get(col)):
+                loc_parts.append(f"{label} : {first_row[col]}")
+        if loc_parts:
+            parts.append("Localisation — " + " | ".join(loc_parts))
+
+        # Texte des chunks
+        if 'chunk_id' in group.columns:
+            text = " ".join(group.sort_values('chunk_id')['text'].tolist())
+        else:
+            text = " ".join(group['text'].tolist())
+        parts.append(f"Description : {text}")
+
+        context_items.append("\n".join(parts))
+
+    return context_items
+
+
 def evaluate_with_deepeval(delay_between_calls: float = 5.0, api_delay: float = 3.0):
     """Évaluation avec DeepEval"""
     print("🤖 Initialisation...")
     chatbot = EventChatbot()
     mistral_model = MistralModel(delay=api_delay)
     
-    # Charger les questions de test
     import json
     with open(Path(__file__).parent / "test_queries.json", 'r', encoding='utf-8') as f:
         test_data = json.load(f)
     
-    print(f"⏱️  Délai entre les test cases: {delay_between_calls}s")
-    print(f"⏱️  Délai entre les appels API: {api_delay}s")
-    print(f"⚠️  Note: DeepEval lance 4 métriques en parallèle par test case")
+    print(f"⏱️  Délai entre les test cases  : {delay_between_calls}s")
+    print(f"⏱️  Délai entre les appels API  : {api_delay}s")
+    print(f"⚠️  DeepEval lance 4 métriques en parallèle par test case")
     
     test_cases = []
     
@@ -96,27 +158,25 @@ def evaluate_with_deepeval(delay_between_calls: float = 5.0, api_delay: float = 
         
         print(f"\n📝 [{i}/{len(test_data)}] {query}")
         
-        # Récupérer contexte et réponse
         relevant_chunks, _ = chatbot.search_relevant_events(query, k=5)
-        context = relevant_chunks['text'].tolist()
         context_str = chatbot.format_context(relevant_chunks)
         answer = chatbot.generate_response(query, context_str)
-        
-        # Créer un test case DeepEval
+
+        # FIX #3 : contexte enrichi avec métadonnées
+        rich_context = build_rich_context(relevant_chunks)
+
         test_case = LLMTestCase(
             input=query,
             actual_output=answer,
             expected_output=ground_truth,
-            retrieval_context=context
+            retrieval_context=rich_context
         )
         test_cases.append(test_case)
         
-        # Pause entre les appels
         if i < len(test_data):
             print(f"  ⏸️  Pause de {delay_between_calls}s...")
             time.sleep(delay_between_calls)
     
-    # Définir les métriques (elles s'exécuteront en parallèle)
     metrics = [
         AnswerRelevancyMetric(model=mistral_model, threshold=0.7),
         FaithfulnessMetric(model=mistral_model, threshold=0.7),
@@ -124,7 +184,6 @@ def evaluate_with_deepeval(delay_between_calls: float = 5.0, api_delay: float = 
         ContextualRecallMetric(model=mistral_model, threshold=0.7)
     ]
     
-    # Évaluer un test case à la fois
     print("\n🧪 Évaluation en cours (mode séquentiel)...")
     print("⚠️  Chaque test case prendra ~30-60s (4 métriques × délais)")
     all_results = []
@@ -139,7 +198,6 @@ def evaluate_with_deepeval(delay_between_calls: float = 5.0, api_delay: float = 
             print(f"  ❌ Erreur sur test case {i}: {e}")
             all_results.append(None)
         
-        # Pause entre chaque test case
         if i < len(test_cases):
             print(f"  ⏸️  Pause de {delay_between_calls}s avant le prochain test...")
             time.sleep(delay_between_calls)

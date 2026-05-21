@@ -11,11 +11,15 @@ wheels/
 
 # data
 data/
+data/*.json
 src/*.json
 src/*.idx
-*.json
 
 .env
 
 src/chunks_with_embeddings.json
 src/faiss_index.idx
+
+
+# testing
+.deepeval/

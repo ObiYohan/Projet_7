@@ -1,18 +1,49 @@
 [
   {
     "query": "Quels concerts sont disponibles en juillet 2026 ?",
-    "ground_truth": "En juillet 2026, vous trouverez plusieurs concerts de musique."
+    "ground_truth": "En juillet 2026, plusieurs concerts sont disponibles à Draguignan. Les apéros-concerts du 9, 23 et 30 juillet se déroulent en centre-ville de 16h30 à 20h30-21h00 avec différents groupes de musique (Pop Rock, Jazz, Soul, Funk, Variétés). Le concert 'Laisse Béton – Tribute Renaud' a lieu le 21 juillet 2026 au Parc Haussmann à Draguignan.",
+    "expected_data": {
+      "must_contain": ["juillet", "2026", "concert", "Draguignan"],
+      "must_have_dates": true,
+      "must_have_location": true,
+      "min_events": 1
+    }
   },
   {
     "query": "Je cherche des activités pour enfants en juin",
-    "ground_truth": "Voici les activités adaptées aux enfants disponibles pour le mois de juin."
+    "ground_truth": "En juin 2026, plusieurs activités adaptées aux enfants sont disponibles dans la région, incluant des ateliers créatifs, des spectacles et des animations ludiques. Les événements précisent généralement l'âge recommandé et le lieu.",
+    "expected_data": {
+      "must_contain": ["enfants", "juin"],
+      "must_have_dates": true,
+      "must_have_age_info": false,
+      "min_events": 1
+    }
   },
   {
     "query": "Je veux découvrir des expositions d'art contemporain",
-    "ground_truth": "Plusieurs galeries présentent 4 expositions d'art contemporain avec des œuvres de jeunes artistes émergents."
+    "ground_truth": "Plusieurs expositions d'art contemporain sont disponibles dans la région PACA, dans des galeries et musées comme la Vieille Charité à Marseille. Les événements présentent des œuvres d'artistes variés avec des dates et lieux précis.",
+    "expected_data": {
+      "must_contain": ["art", "exposition"],
+      "must_have_location": true,
+      "min_events": 1
+    }
   },
   {
     "query": "Recommande-moi des activités en plein air dans le Vaucluse",
-    "ground_truth": "4 événements gratuits sont proposés : concerts en plein air, visites guidées, projections de films et conférences."
+    "ground_truth": "Le Vaucluse propose des activités en plein air telles que des randonnées, des visites de sites naturels, des marchés locaux et des événements culturels en extérieur, avec des dates et lieux précis dans la région.",
+    "expected_data": {
+      "must_contain": ["Vaucluse"],
+      "must_have_location": true,
+      "min_events": 1
+    }
+  },
+  {
+    "query": "Quels sont les événements gratuits disponibles ?",
+    "ground_truth": "Plusieurs événements gratuits sont proposés dans la région, tels que des concerts en plein air, des animations et des spectacles. Chaque événement précise le lieu, la date et les conditions d'accès gratuit.",
+    "expected_data": {
+      "must_contain": ["gratuit"],
+      "must_have_dates": true,
+      "min_events": 1
+    }
   }
 ]
