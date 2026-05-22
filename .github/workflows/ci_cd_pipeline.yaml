@@ -20,9 +20,7 @@ jobs:
     
     - name: Install dependencies
       run: |
-        python -m pip install --upgrade pip
-        pip install -e ".[test]"
-        pip install pytest pytest-json-report tabulate
+        pip install ".[test]"  # Only test dependencies
     
     - name: Run unit tests
       run: |

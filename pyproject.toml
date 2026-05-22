@@ -1,35 +1,54 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
 [project]
-name = "projet-7"
-version = "0.1.0"
-description = "Add your description here"
-readme = "README.md"
-requires-python = ">=3.11,<3.14"
+name = "projet_7_chatbot"
+version = "1.0.0"
+description = "Chatbot for event recommendations"
+requires-python = ">=3.10"
 dependencies = [
-    "datasets>=4.8.5",
-    "python-dotenv>=1.0.0",
-    "faiss-cpu>=1.13.2",
-    "fastapi>=0.136.1",
-    "ipykernel>=7.2.0",
-    "langchain>=1.2.17",
-    "langchain-text-splitters>=1.1.2",
-    "pandas>=3.0.2",
-    "streamlit>=1.57.0",
-    "tiktoken>=0.12.0",
-    "dotenv>=0.9.9",
-    "langchain-mistralai>=1.1.4",
-    "scikit-learn>=1.8.0",
-    "mistralai==1.12.4",
-    "langchain-huggingface>=1.2.2",
-    "sentence-transformers>=5.5.0",
-    "deepeval>=4.0.2",
-    "pytest>=9.0.3",
-    "pytest-cov>=7.1.0",
+    "mistralai>=1.0.0",
+    "faiss-cpu>=1.7.4",
+    "pandas>=2.0.0",
+    "numpy>=1.24.0",
 ]
 
 [project.optional-dependencies]
+# Core testing (minimal)
 test = [
-    "pytest>=9.0.0",
+    "pytest>=8.0.0",
     "pytest-json-report>=1.5.0",
-    "pytest-cov>=7.1.0",
-    "tabulate>=0.9.0",
 ]
+
+# Extended testing with DeepEval
+test-full = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=4.1.0",
+    "deepeval>=4.0.0",
+]
+
+# API server
+api = [
+    "fastapi>=0.109.0",
+    "uvicorn[standard]>=0.27.0",
+]
+
+# Data processing (only for initial setup)
+data-processing = [
+    "tiktoken>=0.5.0",
+    "langchain-text-splitters>=0.0.1",
+    "jupyter>=1.0.0",
+]
+
+# Development tools
+dev = [
+    "black>=24.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.8.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
