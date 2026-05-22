@@ -1,10 +1,11 @@
-name: Tests Automatisés
+
+name: CI Tests
 
 on:
   push:
-    branches: [ master ]
+    branches: [ main, develop ]
   pull_request:
-    branches: [ master ]
+    branches: [ main ]
 
 jobs:
   test:
@@ -13,30 +14,38 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
-    - name: Set up Python
-      uses: actions/setup-python@v4
+    - name: Install uv
+      uses: astral-sh/setup-uv@v4
       with:
-        python-version: '3.13'
+        enable-cache: true
+        cache-dependency-glob: "uv.lock"
     
-    - name: Install dependencies
+    - name: Set up Python
+      run: uv python install 3.13
+    
+    - name: Install minimal dependencies for tests
       run: |
-        pip install ".[test]"  # Only test dependencies
+        uv sync --extra test --no-dev
     
     - name: Run unit tests
+      env:
+        MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
       run: |
-        python -m pytest tests/ -v --tb=short --json-report --json-report-file=test_report.json
+        uv run pytest tests/ -m "unit" \
+          --json-report \
+          --json-report-file=test-report.json \
+          --cov=src \
+          --cov-report=xml \
+          --cov-report=term-missing
     
-    # - name: Generate test report
-    #   if: always()
-    #   run: |
-    #     python tests/generate_report.py
+    - name: Upload coverage
+      uses: codecov/codecov-action@v4
+      with:
+        file: ./coverage.xml
     
     - name: Upload test results
       if: always()
       uses: actions/upload-artifact@v4
       with:
         name: test-results
-        path: |
-          test_report.json
-          TEST_REPORT.md
-          test_results_*.json
+        path: test-report.json
