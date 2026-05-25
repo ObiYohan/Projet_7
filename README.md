@@ -181,6 +181,25 @@ Documentation interactive disponible sur :
     ├── .env.example
     └── README.md
 
+### Schéma UML
+```mermaid
+graph TB
+    User[Utilisateur] --> API[FastAPI]
+    API[Endpoint /ask] --> User[Utilisateur]
+    API --> Chatbot[Chatbot]
+    LLM --> API
+    Chatbot --> FAISS[Base Vectorielle FAISS]
+    Chatbot --> LLM[Mistral LLM]
+    Data[Données Événements]
+    
+    subgraph Pipeline["Pipeline de Traitement"]
+        Data --> Chunks[Chunking]
+        Chunks --> EmbedGen[Génération Embeddings]
+        EmbedGen --> FAISS
+    end
+    
+```
+
 ### Technologies utilisées
 
 - **FastAPI** : Framework web asynchrone
@@ -227,3 +246,14 @@ Documentation interactive disponible sur :
 4. Redémarrer le service :
 
     docker compose restart chatbot-api
+
+### Justification des choix techniques
+
+| Composant | Choix | Justification |
+|-----------|-------|---------------|
+| **Framework API** | FastAPI | Asynchrone, documentation auto, validation Pydantic |
+| **LLM** | Mistral AI | Support français natif, coût optimisé, API simple |
+| **Base vectorielle** | FAISS | Rapide sur CPU, pas de serveur externe requis |
+| **Chunking** | Conditionnel (400 tokens) | Équilibre contexte/précision, overlap pour continuité |
+| **Embedding** | mistral-embed | 1024 dimensions, optimisé pour le français |
+| **Conteneurisation** | Docker | Déploiement reproductible, isolation des dépendances |
