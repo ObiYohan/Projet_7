@@ -184,19 +184,55 @@ Documentation interactive disponible sur :
 ### Schéma UML
 ```mermaid
 graph TB
-    User[Utilisateur] --> API[FastAPI]
-    API[Endpoint /ask] --> User[Utilisateur]
-    API --> Chatbot[Chatbot]
-    LLM --> API
-    Chatbot --> FAISS[Base Vectorielle FAISS]
-    Chatbot --> LLM[Mistral LLM]
-    Data[Données Événements]
+    User[👤 Utilisateur] -->|Question| API[🌐 FastAPI /ask]
+    API -->|Réponse JSON| User
     
-    subgraph Pipeline["Pipeline de Traitement"]
-        Data --> Chunks[Chunking]
-        Chunks --> EmbedGen[Génération Embeddings]
-        EmbedGen --> FAISS
+    API --> Chatbot[🤖 Chatbot RAG]
+    
+    Chatbot --> SearchFlow[🔍 Flux de Recherche]
+    Chatbot --> GenFlow[✍️ Flux de Génération]
+    
+    subgraph SearchFlow[" "]
+        Embed[1️⃣ Embedding requête] --> Search[2️⃣ Recherche FAISS]
+        Search --> Filter[3️⃣ Filtrage métadonnées]
     end
+    
+    subgraph GenFlow[" "]
+        Prompt[4️⃣ Construction prompt] --> Generate[5️⃣ Génération LLM]
+    end
+    
+    Embed -.->|Mistral-embed| Mistral[🧠 Mistral AI]
+    Search -.-> FAISS[(📊 FAISS Index<br/>2929 chunks)]
+    Filter -.-> Metadata[📍 Métadonnées<br/>dates, lieux]
+    Generate -.->|Mistral-small| Mistral
+    
+    Data[📁 Événements OpenAgenda<br/>7111 événements] --> Pipeline
+    
+    subgraph Pipeline["🔄 Pipeline de Prétraitement"]
+        direction TB
+        P1[Filtrage temporel<br/>→ 2706 événements futurs] --> P2[Chunking conditionnel<br/>→ 2929 chunks]
+        P2 --> P3[Enrichissement<br/>ville, date, lieu]
+        P3 --> P4[Génération Embeddings<br/>78 batches]
+        P4 --> P5[Construction Index]
+    end
+    
+    Pipeline --> FAISS
+    
+    subgraph Context["💬 Gestion Contexte"]
+        Memory[Mémoire<br/>5 derniers échanges]
+    end
+    
+    Chatbot -.->|Historique| Memory
+    Memory -.->|Contexte| Prompt
+    
+    style API fill:#e1f5ff
+    style Chatbot fill:#fff4e1
+    style Mistral fill:#ffe1f5
+    style FAISS fill:#e1ffe1
+    style Pipeline fill:#f0f0f0
+    style SearchFlow fill:#f9f9f9
+    style GenFlow fill:#f9f9f9
+    style Context fill:#fff9e6
     
 ```
 
