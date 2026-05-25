@@ -418,7 +418,7 @@ class EventChatbot:
         )
         
         response = self.mistral.chat.complete(
-            model="mistral-medium-latest",
+            model="open-mistral-7b",
             messages=[
                 {"role": "system", "content": full_prompt},
                 {"role": "user", "content": query}

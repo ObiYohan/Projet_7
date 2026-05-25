@@ -8,6 +8,7 @@ Corrections apportées :
             (des agrégats comme "173 événements" ne peuvent pas être fournis par
              un retriever k=5, donc ContextualRecall était mécaniquement 0)
 """
+from datetime import datetime
 import sys
 from pathlib import Path
 import time
@@ -29,7 +30,7 @@ from src.chatbot import EventChatbot
 class MistralModel(DeepEvalBaseLLM):
     """Wrapper Mistral pour DeepEval avec rate limiting et retry"""
     
-    def __init__(self, delay: float = 5.0):
+    def __init__(self, delay: float = 7.0):
         from mistralai import Mistral
         import os
         self.client = Mistral(api_key=os.getenv("MISTRAL_API_KEY"))
@@ -49,7 +50,7 @@ class MistralModel(DeepEvalBaseLLM):
             time.sleep(wait_time)
         self.last_call_time = time.time()
     
-    def generate(self, prompt: str, max_retries: int = 3) -> str:
+    def generate(self, prompt: str, max_retries: int = 5) -> str:
         for attempt in range(max_retries):
             try:
                 self._wait_if_needed()
@@ -136,7 +137,8 @@ def build_rich_context(relevant_chunks: pd.DataFrame) -> list[str]:
     return context_items
 
 
-def evaluate_with_deepeval(delay_between_calls: float = 5.0, api_delay: float = 3.0):
+def evaluate_with_deepeval(delay_between_calls: float = 10.0, api_delay: float = 5.0, 
+                          start_from: int = 0, max_tests: int = None):
     """Évaluation avec DeepEval"""
     print("🤖 Initialisation...")
     chatbot = EventChatbot()
@@ -145,6 +147,14 @@ def evaluate_with_deepeval(delay_between_calls: float = 5.0, api_delay: float = 
     import json
     with open(Path(__file__).parent / "test_queries.json", 'r', encoding='utf-8') as f:
         test_data = json.load(f)
+    
+    # Filtrer les tests à exécuter
+    if start_from > 0:
+        test_data = test_data[start_from:]
+        print(f"⚠️  Reprise depuis le test {start_from + 1}")
+    
+    if max_tests:
+        test_data = test_data[:max_tests]
     
     print(f"⏱️  Délai entre les test cases  : {delay_between_calls}s")
     print(f"⏱️  Délai entre les appels API  : {api_delay}s")
@@ -202,15 +212,116 @@ def evaluate_with_deepeval(delay_between_calls: float = 5.0, api_delay: float = 
             print(f"  ⏸️  Pause de {delay_between_calls}s avant le prochain test...")
             time.sleep(delay_between_calls)
     
-    print("\n📊 Résultats finaux:")
-    for i, result in enumerate(all_results, 1):
-        print(f"\n{'='*50}")
-        print(f"Test case {i}:")
-        if result:
-            print(result)
-        else:
-            print("❌ Échec de l'évaluation")
+    # Créer et afficher le tableau d'évaluation
+    print("\n" + "="*80)
+    print("📊 GÉNÉRATION DU TABLEAU D'ÉVALUATION")
+    print("="*80)
+    
+    evaluation_df = create_evaluation_table(test_data, all_results)
+    
+    print("\n" + evaluation_df.to_string(index=False))
+    
+    # Sauvegarder les résultats
+    save_evaluation_results(evaluation_df, test_data, all_results)
+    
+    print("\n✅ Évaluation terminée!")
+
+def create_evaluation_table(test_cases_data: list, results: list) -> pd.DataFrame:
+    """
+    Crée un tableau d'évaluation structuré avec les métriques
+    
+    Args:
+        test_cases_data: Liste des données de test (queries, etc.)
+        results: Liste des résultats d'évaluation DeepEval
+    
+    Returns:
+        DataFrame avec les métriques par test case
+    """
+    evaluation_data = []
+    
+    for i, (test_data, result) in enumerate(zip(test_cases_data, results), 1):
+        row = {
+            'Test_ID': i,
+            'Query': test_data['query'][:80] + '...' if len(test_data['query']) > 80 else test_data['query'],
+            'Faithfulness': None,
+            'Answer_Relevancy': None,
+            'Context_Precision': None,
+            'Status': 'Failed'
+        }
+        
+        if result is not None:
+            try:
+                # Extraire les scores des métriques
+                for test_result in result.test_results:
+                    for metric_data in test_result.metrics_data:
+                        metric_name = metric_data.name
+                        score = metric_data.score
+                        
+                        if 'Faithfulness' in metric_name:
+                            row['Faithfulness'] = round(score, 3)
+                        elif 'Answer Relevancy' in metric_name:
+                            row['Answer_Relevancy'] = round(score, 3)
+                        elif 'Contextual Precision' in metric_name:
+                            row['Context_Precision'] = round(score, 3)
+                
+                row['Status'] = 'Success'
+            except Exception as e:
+                print(f"  ⚠️  Erreur lors de l'extraction des métriques pour le test {i}: {e}")
+        
+        evaluation_data.append(row)
+    
+    df = pd.DataFrame(evaluation_data)
+    
+    # Calculer les moyennes (en ignorant les None)
+    summary_row = {
+        'Test_ID': 'MOYENNE',
+        'Query': '---',
+        'Faithfulness': df['Faithfulness'].mean() if df['Faithfulness'].notna().any() else None,
+        'Answer_Relevancy': df['Answer_Relevancy'].mean() if df['Answer_Relevancy'].notna().any() else None,
+        'Context_Precision': df['Context_Precision'].mean() if df['Context_Precision'].notna().any() else None,
+        'Status': f"{df[df['Status'] == 'Success'].shape[0]}/{len(df)}"
+    }
+    
+    # Arrondir les moyennes
+    for key in ['Faithfulness', 'Answer_Relevancy', 'Context_Precision']:
+        if summary_row[key] is not None:
+            summary_row[key] = round(summary_row[key], 3)
+    
+    df = pd.concat([df, pd.DataFrame([summary_row])], ignore_index=True)
+    
+    return df
 
 
-if __name__ == "__main__":
-    evaluate_with_deepeval()
+def save_evaluation_results(df: pd.DataFrame, test_cases_data: list, results: list):
+    """Sauvegarde les résultats dans plusieurs formats"""
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_dir = Path(__file__).parent / "evaluation_results"
+    output_dir.mkdir(exist_ok=True)
+    
+    # CSV pour analyse
+    csv_path = output_dir / f"evaluation_{timestamp}.csv"
+    df.to_csv(csv_path, index=False, encoding='utf-8')
+    print(f"\n💾 Tableau CSV sauvegardé : {csv_path}")
+    
+    # Rapport Markdown
+    md_path = output_dir / f"evaluation_report_{timestamp}.md"
+    with open(md_path, 'w', encoding='utf-8') as f:
+        f.write(f"# Rapport d'Évaluation DeepEval\n\n")
+        f.write(f"**Date**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+        f.write(f"**Nombre de tests**: {len(test_cases_data)}\n\n")
+        f.write("## Tableau des Résultats\n\n")
+        f.write(df.to_markdown(index=False))
+        f.write("\n\n## Métriques\n\n")
+        f.write("- **Faithfulness**: Fidélité de la réponse au contexte fourni\n")
+        f.write("- **Answer Relevancy**: Pertinence de la réponse par rapport à la question\n")
+        f.write("- **Context Precision**: Précision du contexte récupéré\n")
+    print(f"💾 Rapport Markdown : {md_path}")
+
+if __name__ == "__main__": 
+    # Relancer uniquement le test 1
+    evaluate_with_deepeval(
+        delay_between_calls=15.0,
+        api_delay=8.0,
+        start_from=0,
+        max_tests=1
+    )

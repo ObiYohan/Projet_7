@@ -4,18 +4,97 @@ API de chatbot intelligent pour rechercher et recommander des événements publi
 
 ## 🎯 Objectifs du projet
 
-Ce projet vise à créer un assistant conversationnel intelligent capable de :
+### Contexte
 
-- Répondre aux questions des utilisateurs sur les événements culturels en région PACA
-- Fournir des recommandations personnalisées basées sur les préférences (lieu, date, type d'événement)
-- Utiliser la recherche sémantique pour comprendre les intentions des utilisateurs
-- Maintenir un contexte conversationnel pour des interactions naturelles
-- Filtrer automatiquement les événements passés et présenter uniquement les événements à venir
+En tant que **data scientist freelance** spécialisé dans le traitement du langage naturel (NLP) et la création de systèmes intelligents, j'interviens en mission pour **Puls-Events**, une entreprise technologique qui développe une plateforme de recommandations culturelles personnalisées.
 
-Le système utilise une architecture RAG (Retrieval-Augmented Generation) combinant :
-- **FAISS** pour la recherche vectorielle rapide
-- **Mistral AI** pour les embeddings et la génération de réponses
-- **FastAPI** pour exposer l'API REST
+**Puls-Events** souhaite tester un nouveau **chatbot intelligent** capable de répondre à des questions utilisateurs sur les événements culturels à venir, en s'appuyant sur un système **RAG (Retrieval-Augmented Generation)** combinant recherche vectorielle et génération de réponse en langage naturel.
+
+#### 🎯 Mission confiée
+Livrer un **POC (Proof of Concept) complet** avec :
+- ✅ Une **API REST exploitable** par les équipes produit et marketing
+- ✅ Une **démonstration de faisabilité technique** du système RAG
+- ✅ Une **validation de la pertinence métier** (recommandations pertinentes)
+- ✅ Une **évaluation des performances** (temps de réponse, qualité des réponses)
+
+#### 📊 Enjeux pour Puls-Events
+Actuellement, les utilisateurs de la plateforme doivent :
+- Naviguer manuellement parmi des milliers d'événements
+- Utiliser des filtres rigides (date exacte, ville précise)
+- Reformuler leurs recherches plusieurs fois
+
+Le chatbot RAG doit permettre de **transformer l'expérience utilisateur** en proposant un dialogue naturel et des recommandations contextualisées.
+
+---
+
+### Problématique
+
+**Comment un système RAG (Retrieval-Augmented Generation) peut-il améliorer l'expérience utilisateur et réduire la charge du service client ?**
+
+Les défis métier identifiés :
+1. **Recherche complexe** : Les utilisateurs formulent des requêtes variées ("concerts ce week-end à Marseille", "activités pour enfants en juillet")
+2. **Données volumineuses** : 7111 événements avec descriptions longues (jusqu'à 3155 tokens)
+3. **Contexte conversationnel** : Nécessité de maintenir un dialogue naturel ("Et à Avignon ?", "Plutôt en soirée")
+4. **Fraîcheur des données** : Filtrage automatique des événements passés
+
+**Pourquoi RAG ?**
+- ✅ **Précision** : Recherche sémantique vs mots-clés (comprend "spectacle" = "concert")
+- ✅ **Contexte** : Génération de réponses personnalisées basées sur les données réelles
+- ✅ **Fiabilité** : Pas d'hallucinations (réponses ancrées dans les événements existants)
+- ✅ **Scalabilité** : Ajout de nouveaux événements sans réentraînement du modèle
+
+---
+
+### Objectif du POC
+
+Ce POC vise à **démontrer la faisabilité technique et la valeur métier** d'un assistant RAG pour Puls-Events :
+
+#### 🎯 Objectifs techniques
+1. **Recherche sémantique performante** : Temps de réponse < 2 secondes
+2. **Filtrage intelligent** : Combinaison recherche vectorielle + métadonnées (date, lieu)
+3. **Génération contextuelle** : Réponses naturelles en français avec sources citées
+4. **Mémoire conversationnelle** : Maintien du contexte sur 5 échanges
+5. **API REST documentée** : Endpoints exploitables par les équipes métier
+
+#### 💼 Objectifs métier
+1. **Réduction des sollicitations du service client** pour les demandes de recommandations
+2. **Personnalisation** : Recommandations adaptées aux préférences utilisateur
+
+#### 📊 Critères de succès
+- **Pertinence** : Score de contextual relevancy > 0.7 (DeepEval)
+- **Fidélité** : Score de faithfulness > 0.8 (pas d'hallucinations)
+- **Complétude** : Score de answer relevancy > 0.75
+- **Performance** : Temps de recherche FAISS < 100ms
+- **Exploitabilité** : API documentée (Swagger) + logs structurés
+
+---
+
+### Périmètre
+
+#### 📍 Zone géographique
+- **Région** : Provence-Alpes-Côte d'Azur (PACA)
+- **Départements couverts** : 
+  - Bouches-du-Rhône (13)
+  - Var (83)
+  - Alpes-Maritimes (06)
+  - Vaucluse (84)
+  - Alpes-de-Haute-Provence (04)
+  - Hautes-Alpes (05)
+- **Villes principales** : Marseille, Nice, Toulon, Aix-en-Provence, Avignon, Cannes
+
+#### 📅 Période d'événements
+- **Données sources** : Événements OpenAgenda
+- **Filtrage temporel** : Uniquement événements futurs
+
+#### 📁 Données utilisées
+- **Source** : OpenAgenda (plateforme officielle d'événements publics)
+- **Format** : JSON structuré avec métadonnées enrichies
+- **Champs exploités** :
+  - Descriptions longues (texte libre)
+  - Dates (début/fin, première/dernière occurrence)
+  - Localisation (nom du lieu, ville, code postal, coordonnées GPS)
+  - Contact (téléphone, site web)
+  - Catégories d'événements
 
 ## ✨ Fonctionnalités
 
