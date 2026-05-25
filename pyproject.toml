@@ -1,77 +1,52 @@
-[project]
-name = "projet-7"
-version = "0.1.0"
-description = "Chatbot événements culturels"
-readme = "README.md"
-requires-python = ">=3.11,<3.14"
-
-# ✅ DÉPENDANCES MINIMALES (core)
-dependencies = [
-    "mistralai==1.12.4",
-    "faiss-cpu>=1.13.2",
-    "python-dotenv>=1.0.0",
-    "pydantic>=2.0.0",
-]
-
-[project.optional-dependencies]
-# ✅ Tests
-test = [
-    "pytest>=8.0.0",
-    "pytest-json-report>=1.5.0",
-    "pytest-asyncio>=0.23.0",
-    "pytest-mock>=3.12.0",
-    "pytest-cov>=4.1.0",
-]
-
-# ✅ API
-api = [
-    "fastapi>=0.136.1",
-    "uvicorn[standard]>=0.23.0",
-]
-
-# ✅ Interface utilisateur
-ui = [
-    "streamlit>=1.57.0",
-]
-
-# ✅ Traitement de données (CPU uniquement)
-data = [
-    "pandas>=3.0.2",
-    "tiktoken>=0.12.0",
-    "langchain>=1.2.17",
-    "langchain-text-splitters>=1.1.2",
-    "langchain-mistralai>=1.1.4",
-    "langchain-huggingface>=1.2.2",
-]
-
-# ✅ Évaluation
-eval = [
-    "deepeval>=4.0.2",
-    "scikit-learn>=1.8.0",
-]
-
-# ✅ Développement
-dev = [
-    "ipykernel>=7.2.0",
-]
-
-[tool.uv]
-# ✅ Forcer CPU uniquement (pas de CUDA)
-index-url = "https://pypi.org/simple"
-
-[tool.uv.sources]
-# ✅ Forcer torch CPU si nécessaire
-torch = { index = "https://download.pytorch.org/whl/cpu" }
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-python_files = ["test_*.py"]
-addopts = "-v --tb=short --strict-markers"
-markers = [
-    "integration: Tests d'intégration nécessitant une vraie API",
-    "unit: Tests unitaires avec mocks",
-]
-
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[project]
+name = "projet-7"
+version = "0.1.0"
+description = "Chatbot RAG avec Mistral AI"
+requires-python = ">=3.13"
+dependencies = [
+    "datasets>=4.8.5",
+    "python-dotenv>=1.0.0",
+    "faiss-cpu>=1.13.2",
+    "fastapi>=0.136.1",
+    "ipykernel>=7.2.0",
+    "langchain>=1.2.17",
+    "langchain-text-splitters>=1.1.2",
+    "pandas>=3.0.2",
+    "streamlit>=1.57.0",
+    "tiktoken>=0.12.0",
+    "dotenv>=0.9.9",
+    "langchain-mistralai>=1.1.4",
+    "scikit-learn>=1.8.0",
+    "mistralai==1.12.4",
+    "langchain-huggingface>=1.2.2",
+    "sentence-transformers>=5.5.0",
+    "deepeval>=4.0.2",
+    "pytest>=9.0.3",
+    "pytest-cov>=7.1.0",
+    "pytest-json-report>=1.5.0",
+    "tabulate>=0.9.0",
+    "uvicorn>=0.30.0",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=9.0.3",
+    "pytest-cov>=7.1.0",
+    "pytest-json-report>=1.5.0",
+    "tabulate>=0.9.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/tests",
+    "/pyproject.toml",
+    "/README.md",
+]

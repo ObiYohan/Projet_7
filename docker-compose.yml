@@ -1,0 +1,36 @@
+services:
+  chatbot-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: chatbot-api
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY}
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./logs:/app/logs:rw
+    restart: unless-stopped
+
+    develop:
+      watch:
+        # Synchronise automatiquement les changements de code
+        - action: sync
+          path: ./src
+          target: /app/src
+        - action: sync
+          path: ./api
+          target: /app/api
+        # Rebuild si requirements.txt change
+        - action: rebuild
+          path: requirements.txt
+          
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
