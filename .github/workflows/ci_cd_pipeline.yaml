@@ -23,9 +23,13 @@ jobs:
     - name: Set up Python
       run: uv python install 3.13
     
-    - name: Install minimal dependencies for tests
+    - name: Install dependencies
       run: |
-        uv sync --extra test --no-dev
+        uv sync --all-extras
+    
+    - name: List installed packages
+      run: |
+        uv pip list
     
     - name: Run unit tests
       env:
